@@ -1,0 +1,317 @@
+﻿@{
+    ViewData["Title"] = "Home Page";
+}
+
+
+<div class="overlay" id="jsFormLoader" style="display:none">
+    <div class="loading text-center">
+
+        <div class="mt-5">
+            <span class="h5 text-white">Loading. Please wait...</span>
+        </div>
+
+    </div>
+</div>
+
+<div class="modal fade stati" id="errLogModal" data-backdrop="static" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exampleModalLabel">Import Fail</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="div_content">
+
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="text-left">
+    <h4>Import Data System</h4>
+
+</div>
+
+
+<div class="panel-custom-default mt-3">
+    <form asp-controller="Home" asp-action="Index" method="post" id="uploadform" enctype="multipart/form-data">
+        <div class="d-flex">
+            <h5>Please upload file (csv, xml)</h5>
+        </div>
+        <div class="row">
+            <div class="col-md-10">
+                <div class="d-flex">
+                    <input type="file" name="postedFile" accept=".csv, .xml" id="file" class="form-control" required />
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="d-flex justify-content-end">
+                    <button class="btn btn-primary rounded btn-block" type="submit" id="btn_upload">Upload</button>
+                </div>
+
+            </div>
+        </div>
+           
+        <div class="errText text-danger"></div>
+
+    </form>
+</div>
+
+
+
+<div class="row mt-3">
+    <div class="col-md-4">
+        <label>Transaction Date</label>
+        <input class="form-control daterange-single" type="text" placeholder="All" id="datetime">
+    </div>
+    <div class="col-md-3">
+        <label>Currency</label>
+        <input class="form-control" type="text" placeholder="USD, EUR ..." id="searchbox">
+    </div>
+    <div class="col-md-3">
+        <div class="form-group">
+            <label>Status</label>
+            <select class="form-control" name="status" id="dd-status">
+                <option value="" selected>All</option>
+                <option value="A">Approved</option>
+                <option value="R">Rejected</option>
+                <option value="D">Done</option>
+
+            </select>
+        </div>
+    </div>
+
+    <div class="col-md-2 mt-30">
+      
+         <button class="btn btn-info rounded btn-block" onclick="location.reload()" type="button">Clear Filter</button>
+     
+    </div>
+
+</div>
+
+<div id="div_list" class="mt-2">
+
+</div>
+
+
+@section scripts{
+    <script src="~/lib/daterangepicker/moment.min.js"></script>
+    <link href="~/lib/daterangepicker/daterangepicker.css" rel="stylesheet" />
+    <script src="~/lib/daterangepicker/daterangepicker.min.js"></script>
+
+    <script>
+
+        var page = 1;
+        var pageSize = 8;
+        var currency;
+        var fromdate;
+        var todate;
+        var status;
+
+        $(function () {
+            mainlist();
+            initPaging();
+            initComponents();
+        })
+
+
+        function initComponents() {
+
+         
+
+            let input = document.getElementById('searchbox');
+            let timeout = null;
+            input.addEventListener('keyup', function (e) {
+                clearTimeout(timeout);
+                timeout = setTimeout(function () {
+                    Search();
+                }, 500);
+            });
+
+
+            $('#dd-status').on('change', function () {
+                status = $('#dd-status :selected').val();
+                Search();
+            });
+
+            $('#datetime').daterangepicker({
+               // opens: 'left',
+                autoUpdateInput: false,
+            });
+
+
+            $('#datetime').on('apply.daterangepicker', function (ev, picker) {
+                fromdate = picker.startDate.format('YYYY-MM-DD');
+                todate = picker.endDate.format('YYYY-MM-DD');
+                $('#datetime').val(picker.startDate.format('DD-MM-YYYY') + ' - ' + picker.endDate.format('DD-MM-YYYY'));
+                Search();
+
+            });
+
+
+
+        }
+
+
+        function Search() {
+            currency = $('#searchbox').val();
+            page = 1;
+            mainlist()
+        }
+
+
+
+        $('#uploadform').submit(function (e) {
+            $('.errText').empty();
+            overlayLoadingShow('jsFormLoader');
+            e.preventDefault();
+
+            var files = $('#file')[0].files[0];
+            if (files.size > 1000000) {
+                $('.errText').text("file size cannot be bigger than 10MB");
+                overlayLoadingHide('jsFormLoader');
+                return false;
+            }
+
+            var formData = new FormData();
+
+            formData.append("postedFile", files);
+            $.ajax(
+                {
+                    url: "/home/upload",
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    type: "POST",
+                    success: function (data) {
+                        console.log(data);
+                        showMessage(data);
+                        overlayLoadingHide('jsFormLoader');
+                    }
+                }
+            );
+        });
+
+
+
+        function showMessage(data) {
+
+            if (data.ReturnStatus == "200") {
+                swal({
+                    title: data.ReturnMessage,
+                    text: "",
+                    buttonsStyling: false,
+                    confirmButtonClass: "btn btn-primary",
+                    type: "success",
+                    allowOutsideClick: false
+                }).then((result) => {
+                    if (result.value) {
+                        window.location = "/home/import";
+                    }
+                });
+            }
+            else if (data.ReturnStatus == "Fail") {
+                swal({
+                    title: data.ReturnMessage,
+                    text: "",
+                    buttonsStyling: false,
+                    confirmButtonClass: "btn btn-primary",
+                    type: "error",
+                    allowOutsideClick: false
+                }).then((result) => {
+                    if (result.value) {
+                        window.location = "/home/import";
+                    }
+                });
+            } else if (data.ReturnStatus == "Bad Request") {
+                if (data.AdditionalDatas.length > 0) {
+                    $('#div_content').empty().append('');
+                    for (var i = 0; i < data.AdditionalDatas.length; i++) {
+                        $('#div_content').append(`<div class="row"><div class="col-md-12">
+                                                                    <p class="text-danger">${data.AdditionalDatas[i]}</p>
+                                                                 </div></div>`)
+                    }
+                }
+
+                $('#errLogModal').modal('show');
+
+                mainlist();
+            }
+        }
+
+
+        function loading(ID) {
+            $('#' + ID).empty().append('<div class="text-center" style="height:400px;margin-top:100px"><div class="lds-ellipsis"><div></div><div></div><div></div><div></div></div></div>')
+        }
+
+        function overlayLoadingShow(ID) {
+            $('#' + ID).show();
+        }
+
+
+        function overlayLoadingHide(ID) {
+            $('#' + ID).hide();
+        }
+
+
+        function mainlist() {
+            $.ajax({
+                cache: false,
+                url: '/home/list',
+                data: {
+                    page: page,
+                    pageSize: pageSize,
+                    currency: currency,
+                    fromdate: fromdate,
+                    todate: todate,
+                    status: status
+                },
+                beforeSend: function () {
+                    loading('div_list');
+                },
+                success: function (result) {
+                    // console.log(result);
+                    $('#div_list').empty().append(result);
+                },
+                complete: function () {
+
+                }
+            });
+        }
+
+
+        function initPaging() {
+            $("#div_list").on("click", ".pagedList a", function (e) {
+                e.preventDefault();
+                var $a = $(this).attr("href");
+                try {
+                    var pageurl = $a.split(/=/);
+                    page = pageurl[1];
+                    if (page == null) {
+                        page = 1;
+                    }
+                }
+                catch (e) {
+                    page = 1;
+                }
+                mainlist();
+            });
+        }
+
+
+
+
+    </script>
+
+
+
+}
